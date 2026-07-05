@@ -1,0 +1,144 @@
+#define BLYNK_TEMPLATE_ID "TMPL2Fz3tLb9r"     // unique ID of your Blynk project so Blynk knows which template to use
+#define BLYNK_TEMPLATE_NAME "BabyNest"        // name of your project shown in Blynk app
+#define BLYNK_AUTH_TOKEN "x2m2lrDNXvNmUZ2NL_aUCpA8eUl8C1ui" // secret token to connect Arduino with your Blynk app securely
+
+#include <BlynkSimpleStream.h> // library for Blynk communication using Serial (Bluetooth/USB serial)
+
+
+int micPin = A0;      // microphone sensor connected to analog pin A0 to read changing sound values
+int motorPin = 5;     // motor connected to PWM pin ~5 so we can control speed using analogWrite()
+
+int motorSpeed = 120; // default motor speed (0–255), medium speed at startup
+
+bool manualMode = false; // false = automatic mode using baby sound, true = mom controls manually
+bool motorState = false; // hwa eh delwa2ty
+
+
+int prevSound = 0;       // saves previous microphone reading to compare with current reading
+int peakThreshold = 6;   // 22l soot a2ol 3aleh el baby by3yt
+
+int silenceCount = 0;    // kol mara no sound +1 3lshan el motor myo2afsh bsor3a 
+int silenceLimit = 15;   //b3d 15 skot h2fel el motor b2a =15*30 sec elly by loop fehom tany so =450 sec 
+
+int soundCount = 0;      // kol mra y7sl soot kwy y +1 3lshan small noise mt5lesh motor ylef "22ol mn 2 en dah soot el crying"
+int soundLimit = 2;      // y3yt at least mrteen so ysht8l el motor 
+
+int lastCryState = 0;    // to control spam notification 1 = sent already notif
+
+
+unsigned long lastSensorCheck = 0; // a5er w2t 2aret el sensor feh w 3lshan momken trg3 rkm kber awi so unsigned =millis w deh a7sn mn el delay btsh8l kolo 
+
+void setup() {
+  
+  Serial.begin(9600); // starts serial communication speed at 9600 = sor3et n2l el data w dh l2en dh a5er el hc-05
+
+  pinMode(motorPin, OUTPUT); // tells Arduino that motor pin will send output voltage
+
+  analogWrite(motorPin, 0); // keeps motor OFF at startup for safety
+
+  Blynk.begin(Serial, BLYNK_AUTH_TOKEN); // starts Blynk connection using Serial + authentication token
+}
+
+//dh l enaha daset swing 
+BLYNK_WRITE(V1) { // runs automatically whenever button on V1 changes in Blynk app
+
+  int p = param.asInt(); // gets button value from app (1 = ON, 0 = OFF)
+
+  if (p == 1) { // if mom pressed ON
+
+    manualMode = true; // switch from automatic baby detection to manual control
+
+    analogWrite(motorPin, motorSpeed); // turn motor ON with selected speed
+
+  } 
+  else { // if mom pressed OFF
+
+    manualMode = false; // return to automatic sound detection mode
+
+    motorState = false; // force motor state to OFF
+
+    analogWrite(motorPin, 0); // physically stop motor immediately
+
+    if (lastCryState == 1) { // if crying notification was previously active
+
+      Blynk.virtualWrite(V3, 0); // update app and "ekteb "=send "no crying" state to virtual pin V3
+
+      lastCryState = 0; // reset cry notification flag
+    }
+  }
+}
+
+
+BLYNK_WRITE(V2) { // runs whenever speed widget in app changes
+
+  int speedChoice = param.asInt(); // gets selected speed number from app
+
+  if (speedChoice == 1)  motorSpeed = 90;  // low speed
+  else if (speedChoice == 2) motorSpeed = 120; // medium speed
+  else if (speedChoice == 3) motorSpeed = 150; // high speed
+
+  if (manualMode) { // if mom is manually controlling
+
+    analogWrite(motorPin, motorSpeed); // instantly apply new speed to motor
+  }
+}
+
+
+void loop() {
+
+  Blynk.run(); // keeps listening to app commands, MUST always run
+
+  // check sensor every 30 milliseconds instead of using delay() b eno lw 5 sec by5lehom 5000 w - el 2raya el 2dema then if = 30 loop w 22ra el soot 
+  if (millis() - lastSensorCheck >= 30) { // only execute every 30ms 
+
+    lastSensorCheck = millis(); // save current time as last sensor check
+
+    int sound = analogRead(micPin); // read current sound sensor value b2a 
+
+    int diff = abs(sound - prevSound); // by- el 2raya el 2dema ll sensor bl gdeda lw 3alya yb2a momken 3yt 
+    prevSound = sound; // save current sound for next comparison
+
+    if (!manualMode) { // only run automatic logic if mom is NOT controlling manually
+
+      if (diff > peakThreshold) { // if sound change is bigger than threshold → possible baby cry
+
+        soundCount++; // increase sound counter to confirm repeated crying
+
+        silenceCount = 0; // reset silence counter because sound exists
+
+        if (soundCount > soundLimit) { // if sound repeated enough times
+
+          motorState = true; // turn motor ON
+
+          if (lastCryState == 0) { // if crying notification not sent yet
+
+            Blynk.virtualWrite(V3, 1); // send crying status to app through V3
+
+            lastCryState = 1; // remember notification already sent
+          }
+        }
+
+      } 
+      else { // no strong sound detected
+
+        silenceCount++; // count quiet readings
+
+        soundCount = 0; // reset sound counter because crying stopped
+
+        if (silenceCount > silenceLimit) { // if quiet for long enough
+
+          motorState = false; // turn motor OFF
+
+          if (lastCryState == 1) { // if app still shows crying
+
+            Blynk.virtualWrite(V3, 0); // update app to "baby quiet"
+
+            lastCryState = 0; // reset cry state
+          }
+        }
+      }
+
+      analogWrite(motorPin, motorState ? motorSpeed : 0); // shorthand if: ON → selected speed, OFF → 0
+    }
+  }
+}

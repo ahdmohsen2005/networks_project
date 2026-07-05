@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BabyNest · Smart Cradle Control</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f4f7f6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 30px 0;
+        }
+        .main-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            padding: 30px;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        /* كارت حالة الطفل - يتغير لونه عند البكاء */
+        .status-card {
+            background: #e3f2fd;
+            border-left: 5px solid #2196f3;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 25px;
+            transition: all 0.5s ease;
+        }
+        .status-card.crying {
+            background: #ffebee;
+            border-left: 5px solid #f44336;
+            animation: pulse 1.5s infinite;
+        }
+        /* أنيميشن أرجوحة المهد المرئي */
+        .cradle-visual {
+            font-size: 50px;
+            text-align: center;
+            margin: 20px 0;
+            display: inline-block;
+            width: 100%;
+        }
+        .swing-running {
+            animation: swing ease-in-out var(--swing-speed, 1.2s) infinite alternate;
+            transform-origin: top center;
+        }
+        @keyframes swing {
+            0% { transform: rotate(-15deg); }
+            100% { transform: rotate(15deg); }
+        }
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(244, 67, 54, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+        }
+        .speed-btn {
+            border: 2px solid #dee2e6;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .speed-btn.active {
+            background: #2196f3;
+            color: white;
+            border-color: #2196f3;
+        }
+        /* ستايل إضافات اللاي آوت الجديدة لتطابق روح التصميم */
+        .user-badge {
+            cursor: pointer;
+            opacity: 0.5;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+        .user-badge.active {
+            opacity: 1;
+            font-weight: bold;
+        }
+        .counter-box {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+        }
+        .edit-btn {
+            cursor: pointer;
+            font-size: 14px;
+            color: #2196f3;
+            margin-left: 8px;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container" style="max-width: 600px;">
+    
+    <div class="d-flex justify-content-end gap-2 mb-3 px-2">
+        <span onclick="switchUser('Mom')" class="badge bg-danger user-badge active" id="user-Mom">Mom 👩‍🍼</span>
+        <span onclick="switchUser('Dad')" class="badge bg-primary user-badge" id="user-Dad">Dad 👨‍🍼</span>
+        <span onclick="switchUser('Grandma')" class="badge bg-warning text-dark user-badge" id="user-Grandma">Grandma 👵</span>
+    </div>
+
+    <h2 class="text-center mb-4 font-weight-bold" style="color: #333;">🍼 BabyNest System</h2>
+
+    <div class="main-card py-3 text-center">
+        <div id="babyNameContainer">
+            <span style="font-size: 20px;">👶</span>
+            <span id="babyNameDisplay" class="fw-bold fs-5 text-dark">Baby</span>
+            <span class="edit-btn" onclick="enableNameEdit()">Edit Name</span>
+        </div>
+        <div id="babyNameEditInput" class="d-none d-flex gap-2 col-8 mx-auto">
+            <input type="text" id="newNameInput" class="form-control form-control-sm" placeholder="Enter baby name">
+            <button class="btn btn-sm btn-success" onclick="saveBabyName()">Save</button>
+        </div>
+    </div>
+
+    <div id="alertCard" class="status-card d-flex align-items-center">
+        <div id="alertIcon" style="font-size: 40px; margin-right: 15px;">😴</div>
+        <div>
+            <h4 id="alertTitle" class="m-0 font-weight-bold" style="color: #2c3e50;">Baby is sleeping</h4>
+            <small id="alertSub" class="text-muted">All quiet · System Armed</small>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6">
+            <div class="counter-box text-center">
+                <h6 class="text-muted mb-1">Cry Count</h6>
+                <h3 id="cryCounterDisplay" class="fw-bold text-danger m-0">0</h3>
+                <small onclick="resetCryCounter()" style="cursor:pointer;" class="text-muted text-decoration-underline block mt-1">Reset</small>
+            </div>
+        </div>
+        <div class="col-6">
+            <div class="counter-box text-center">
+                <h6 class="text-muted mb-1">Feeding Log</h6>
+                <h3 id="feedCounterDisplay" class="fw-bold text-success mb-2">0</h3>
+                <button onclick="addFeeding()" class="btn btn-sm btn-outline-success py-0 px-2">+ Feed</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-card text-center">
+        <h5 class="text-muted mb-3">Cradle Motion Status</h5>
+        <div id="swingVisual" class="cradle-visual">🧺</div>
+        
+        <div class="d-grid gap-2 col-8 mx-auto mt-4">
+            <button id="swingBtn" onclick="toggleSwing()" class="btn btn-primary btn-lg fs-5">▶ Start Swing</button>
+        </div>
+    </div>
+
+    <div class="main-card text-center">
+        <h5 class="text-muted mb-3">Manual Speed Control</h5>
+        <div id="speedBtns" class="d-flex justify-content-center gap-2">
+            <button onclick="setSpeed('slow', this)" class="speed-btn">Slow</button>
+            <button onclick="setSpeed('medium', this)" class="speed-btn active">Medium</button>
+            <button onclick="setSpeed('fast', this)" class="speed-btn">Fast</button>
+        </div>
+    </div>
+</div>
+
+<script>
+  // التوكن الخاص بكِ مدمج هنا للاتصال المباشر بالسيرفر السحابي
+  const BLYNK_AUTH_TOKEN = "x2m2lrDNXvNmUZ2NL_aUCpA8eUl8C1ui";
+  const BLYNK_SERVER     = "https://blynk.cloud"; 
+
+  // ربط القنوات الافتراضية المحجوزة في بيلينك
+  const PIN_SWING_SWITCH = "V1"; 
+  const PIN_SWING_SPEED  = "V2"; 
+  const PIN_CRY_DETECT   = "V3"; 
+
+  // ميزات اللاي آوت (تعتمد على الذاكرة المحلية حتى لا تختفي عند التحديث)
+  let cryCount = parseInt(localStorage.getItem('cryCount')) || 0;
+  let feedCount = parseInt(localStorage.getItem('feedCount')) || 0;
+  let babyName = localStorage.getItem('babyName') || "Baby";
+  let lastCryStatus = 0; // لمراقبة التغير بين 0 و 1 لإرسال المسج والعداد
+
+  // عرض البيانات المحفوظة في اللاي آوت الجديد
+  document.getElementById('cryCounterDisplay').innerText = cryCount;
+  document.getElementById('feedCounterDisplay').innerText = feedCount;
+  document.getElementById('babyNameDisplay').innerText = babyName;
+
+  // دالة إرسال الأوامر من الشاشة (الـ HTML) إلى الأردوينو عبر السيرفر (أصلية 100%)
+  function sendCommandToBlynk(pin, value) {
+    const url = `${BLYNK_SERVER}/external/api/update?token=${BLYNK_AUTH_TOKEN}&${pin}=${value}`;
+    fetch(url)
+      .then(res => console.log(`Sent ${pin} -> ${value}`))
+      .catch(err => console.error("Blynk Error:", err));
+  }
+
+  // تشغيل وإيقاف الأرجوحة يدوياً عند ضغط الزر (أصلية 100%)
+  window.toggleSwing = function() {
+    const swingBtn = document.getElementById('swingBtn');
+    const swingVisual = document.getElementById('swingVisual');
+    
+    const isCurrentlyRunning = swingBtn.innerText.includes("Stop");
+
+    if (!isCurrentlyRunning) {
+      sendCommandToBlynk(PIN_SWING_SWITCH, 1);
+      if(swingVisual) swingVisual.classList.add('swing-running');
+      swingBtn.innerText = "■ Stop Swing";
+      swingBtn.className = "btn btn-danger";
+    } else {
+      sendCommandToBlynk(PIN_SWING_SWITCH, 0);
+      if(swingVisual) swingVisual.classList.remove('swing-running');
+      swingBtn.innerText = "▶ Start Swing";
+      swingBtn.className = "btn btn-primary";
+    }
+  };
+
+  // التحكم بالسرعات من الأزرار وتغيير سرعة أنيميشن الشاشة (أصلية 100%)
+  window.setSpeed = function(speedText, element) {
+    document.querySelectorAll('#speedBtns .speed-btn').forEach(btn => btn.classList.remove('active'));
+    if(element) element.classList.add('active');
+
+    let blynkSpeedValue = 2; 
+
+    if (speedText === 'slow') {
+      blynkSpeedValue = 1; 
+      document.documentElement.style.setProperty('--swing-speed', '1.8s');
+    } else if (speedText === 'medium') {
+      blynkSpeedValue = 2; 
+      document.documentElement.style.setProperty('--swing-speed', '1.2s');
+    } else if (speedText === 'fast') {
+      blynkSpeedValue = 3; 
+      document.documentElement.style.setProperty('--swing-speed', '0.7s');
+    }
+
+    sendCommandToBlynk(PIN_SWING_SPEED, blynkSpeedValue);
+  };
+
+  // وظائف الـ Layout الجديدة (منفصلة تماماً ومستقلة عن حركة اللوجيك)
+  window.enableNameEdit = function() {
+    document.getElementById('babyNameContainer').classList.add('d-none');
+    document.getElementById('babyNameEditInput').classList.remove('d-none');
+    document.getElementById('newNameInput').value = babyName;
+  };
+
+  window.saveBabyName = function() {
+    const inputVal = document.getElementById('newNameInput').value.trim();
+    if(inputVal !== "") {
+      babyName = inputVal;
+      localStorage.setItem('babyName', babyName);
+      document.getElementById('babyNameDisplay').innerText = babyName;
+    }
+    document.getElementById('babyNameEditInput').classList.add('d-none');
+    document.getElementById('babyNameContainer').classList.remove('d-none');
+  };
+
+  window.switchUser = function(role) {
+    document.querySelectorAll('.user-badge').forEach(badge => badge.classList.remove('active'));
+    document.getElementById(`user-${role}`).classList.add('active');
+  };
+
+  window.addFeeding = function() {
+    feedCount++;
+    localStorage.setItem('feedCount', feedCount);
+    document.getElementById('feedCounterDisplay').innerText = feedCount;
+  };
+
+  window.resetCryCounter = function() {
+    if(confirm("Reset cry counter?")) {
+        cryCount = 0;
+        localStorage.setItem('cryCount', cryCount);
+        document.getElementById('cryCounterDisplay').innerText = cryCount;
+    }
+  };
+
+  // الاستماع المستمر لحالة الحساس (أصلي 100% دون أي تغيير في الفحص)
+  function listenToBabyCry() {
+    const url = `${BLYNK_SERVER}/external/api/get?token=${BLYNK_AUTH_TOKEN}&${PIN_CRY_DETECT}`;
+    
+    fetch(url)
+      .then(response => response.text())
+      .then(value => {
+        const isCrying = parseInt(value) === 1;
+        const alertCard = document.getElementById('alertCard');
+        const swingVisual = document.getElementById('swingVisual');
+        const swingBtn = document.getElementById('swingBtn');
+
+        if (isCrying) {
+          // [تعديل إضافي للميزة] زيادة العداد وإرسال مسج Blynk عند بداية لقطة البكاء فقط
+          if (lastCryStatus === 0) {
+            cryCount++;
+            localStorage.setItem('cryCount', cryCount);
+            document.getElementById('cryCounterDisplay').innerText = cryCount;
+
+            // إرسال المسج السحابي باسم الطفل المكتوب
+            const msg = `⚠️ Alert from BabyNest: ${babyName} is crying!`;
+            const notificationUrl = `${BLYNK_SERVER}/external/api/logEvent?token=${BLYNK_AUTH_TOKEN}&code=baby_crying&description=${encodeURIComponent(msg)}`;
+            fetch(notificationUrl).catch(err => console.log("Notification active"));
+          }
+
+          // تغيير مظهر الشاشة للوضع العاجل (الوردي والطفل يبكي 😭) - أصلي 100%
+          if (alertCard && !alertCard.classList.contains('crying')) {
+            alertCard.classList.add('crying');
+            if(document.getElementById('alertIcon')) document.getElementById('alertIcon').innerText = "😭";
+            if(document.getElementById('alertTitle')) document.getElementById('alertTitle').innerText = `${babyName} is CRYING!`; // دمج الاسم هنا فقط في النص
+            if(document.getElementById('alertSub')) document.getElementById('alertSub').innerText = "Sensor triggered! Running for 5s...";
+            
+            if(swingVisual) swingVisual.classList.add('swing-running');
+            if(swingBtn) {
+              swingBtn.innerText = "■ Stop Swing";
+              swingBtn.className = "btn btn-danger";
+            }
+          }
+          lastCryStatus = 1;
+        } else {
+          // إعادة الواجهة للوضع الطبيعي الهادئ (الأزرق والطفل نائم 😴) - أصلي 100%
+          if (alertCard && alertCard.classList.contains('crying')) {
+            alertCard.classList.remove('crying');
+            if(document.getElementById('alertIcon')) document.getElementById('alertIcon').innerText = "😴";
+            if(document.getElementById('alertTitle')) document.getElementById('alertTitle').innerText = `${babyName} is sleeping`; // دمج الاسم هنا فقط في النص
+            if(document.getElementById('alertSub')) document.getElementById('alertSub').innerText = "All quiet · System Armed";
+            
+            if(swingVisual) swingVisual.classList.remove('swing-running');
+            if(swingBtn) {
+              swingBtn.innerText = "▶ Start Swing";
+              swingBtn.className = "btn btn-primary";
+            }
+          }
+          lastCryStatus = 0;
+        }
+      })
+      .catch(err => console.error("Error fetching data from cry sensor:", err));
+  }
+
+  // فحص حالة الحساس تلقائياً كل ثانية ونصف لتحديث الشاشة فوراً
+  setInterval(listenToBabyCry, 1500);
+</script>
+
+</body>
+</html>

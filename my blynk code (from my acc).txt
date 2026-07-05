@@ -1,0 +1,96 @@
+// السطور الجديدة الخاصة بحسابك أنت
+#define BLYNK_TEMPLATE_ID   "TMPL2Fz3tLb9r"
+#define BLYNK_TEMPLATE_NAME "BabyNest"
+#define BLYNK_AUTH_TOKEN    "x2m2lrDNXvNmUZ2NL_aUCpA8eUl8C1ui"
+
+#include <BlynkSimpleStream.h>
+
+int micPin   = A0;
+int motorPin = 5;
+
+int motorSpeed = 120;
+bool manualMode = false;
+bool motorState = false;
+
+int prevSound = 0;
+int peakThreshold = 6;
+int silenceCount = 0;
+int silenceLimit = 15;
+int soundCount = 0;
+int soundLimit = 2;
+int lastCryState = 0;
+
+unsigned long lastSensorCheck = 0;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(motorPin, OUTPUT);
+  analogWrite(motorPin, 0);
+  
+  // Blynk هيشتغل هنا بالـ Auth Token الجديد تلقائياً
+  Blynk.begin(Serial, BLYNK_AUTH_TOKEN);
+}
+
+BLYNK_WRITE(V1) {
+  int p = param.asInt();
+  if (p == 1) {
+    manualMode = true;
+    analogWrite(motorPin, motorSpeed);
+  } else {
+    manualMode = false;
+    motorState = false;
+    analogWrite(motorPin, 0);
+    if (lastCryState == 1) {
+      Blynk.virtualWrite(V3, 0);
+      lastCryState = 0;
+    }
+  }
+}
+
+BLYNK_WRITE(V2) {
+  int speedChoice = param.asInt();
+  if (speedChoice == 1)      motorSpeed = 90;
+  else if (speedChoice == 2) motorSpeed = 120;
+  else if (speedChoice == 3) motorSpeed = 150;
+  if (manualMode) {
+    analogWrite(motorPin, motorSpeed);
+  }
+}
+
+void loop() {
+  Blynk.run();
+
+  // run sensor every 30ms without using delay()
+  if (millis() - lastSensorCheck >= 30) {
+    lastSensorCheck = millis();
+
+    int sound = analogRead(micPin);
+    int diff = abs(sound - prevSound);
+    prevSound = sound;
+
+    if (!manualMode) {
+      if (diff > peakThreshold) {
+        soundCount++;
+        silenceCount = 0;
+        if (soundCount > soundLimit) {
+          motorState = true;
+          if (lastCryState == 0) {
+            Blynk.virtualWrite(V3, 1);
+            lastCryState = 1;
+          }
+        }
+      } else {
+        silenceCount++;
+        soundCount = 0;
+        if (silenceCount > silenceLimit) {
+          motorState = false;
+          if (lastCryState == 1) {
+            Blynk.virtualWrite(V3, 0);
+            lastCryState = 0;
+          }
+        }
+      }
+      analogWrite(motorPin, motorState ? motorSpeed : 0);
+    }
+  }
+}
